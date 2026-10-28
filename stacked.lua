@@ -200,6 +200,7 @@ hl.on("window.active", function()
     restack_windows()
 end)
 
+-- Allows cycling with arrow keys
 local function focus_card_or_direction(direction, message)
     return function()
         local active_window = hl.get_active_window()
@@ -214,3 +215,17 @@ end
 
 hl.bind(mainMod .. " + left", focus_card_or_direction("left", "next"), { repeating = true })
 hl.bind(mainMod .. " + right", focus_card_or_direction("right", "prev"), { repeating = true })
+
+-- For moving windows around the stack (for Numpad)
+local function stacked_or_layout_action(stacked_message, layout_message)
+    return function()
+        local message = hl.get_config("general.layout") == "lua:stacked" and stacked_message or layout_message
+        hl.dispatch(hl.dsp.layout(message))
+    end
+end
+
+hl.bind(mainMod .. " + KP_Left", stacked_or_layout_action("forward", "swapcol l"), { repeating = true })
+hl.bind(mainMod .. " + KP_Right", stacked_or_layout_action("backward", "swapcol r"), { repeating = true })
+hl.bind(mainMod .. " + KP_Begin", stacked_or_layout_action("top", "fit toend"), { repeating = true })
+hl.bind(mainMod .. " + KP_End", stacked_or_layout_action("end", "consume_or_expel prev"), { repeating = true })
+hl.bind(mainMod .. " + KP_Next", stacked_or_layout_action("front", "consume_or_expel next"), { repeating = true })
