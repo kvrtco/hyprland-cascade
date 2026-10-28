@@ -1,10 +1,6 @@
-local scale = 0.96
 local mainMod = "SUPER"
-local positions = {
-    { x = 0.04, y = 0.00 },
-    { x = 0.02, y = 0.02 },
-    { x = 0.00, y = 0.04 },
-}
+local cardStep = 0.016
+local maxSpread = 0.08
 
 local state = {
     order = {},
@@ -85,6 +81,18 @@ local function sync_order(ctx)
     return targets
 end
 
+local function restack_windows()
+    for i = #state.order, 1, -1 do
+        local window = state.windows[state.order[i]]
+        if window then
+            hl.dispatch(hl.dsp.window.alter_zorder({
+                mode = "top",
+                window = window,
+            }))
+        end
+    end
+end
+
 hl.layout.register("stacked", {
     recalculate = function(ctx)
         local targets = sync_order(ctx)
@@ -95,13 +103,23 @@ hl.layout.register("stacked", {
             return
         end
 
+        local count = #state.order
+        if count == 0 then
+            return
+        end
+
+        local spread = math.min(maxSpread, cardStep * (count - 1))
+        local step = spread / (count - 1)
+        local scale = 1 - spread
+
         for i, id in ipairs(state.order) do
             local target = targets[id]
-            local position = positions[math.min(i, #positions)]
+            local xOffset = spread - step * (i - 1)
+            local yOffset = step * (i - 1)
 
             target:place({
-                x = area.x + area.w * position.x,
-                y = area.y + area.h * position.y,
+                x = area.x + area.w * xOffset,
+                y = area.y + area.h * yOffset,
                 w = area.w * scale,
                 h = area.h * scale,
             })
@@ -114,8 +132,12 @@ hl.layout.register("stacked", {
             return true
         end
 
-        if message ~= "next" and message ~= "prev" then
-            return "stacked: expected next, prev, or refresh"
+        local reorder_actions = {
+            backward = -1,
+            forward = 1,
+        }
+        if message ~= "next" and message ~= "prev" and not reorder_actions[message] and message ~= "end" and message ~= "top" then
+            return "stacked: expected next, prev, backward, forward, end, top, or refresh"
         end
 
         local targets = sync_order(ctx)
@@ -123,7 +145,36 @@ hl.layout.register("stacked", {
             return true
         end
 
+        if message == "top" then
+            local target = targets[state.order[1]]
+            if not target or not target.window then
+                return "stacked: top card has no window"
+            end
+
+            hl.dispatch(hl.dsp.focus({
+                window = "address:" .. target.window.address,
+            }))
+            return true
+        end
+
         local focused_index = index_of(state.order, state.focused_id) or 1
+        if reorder_actions[message] then
+            local target_index = focused_index + reorder_actions[message]
+            if target_index < 1 or target_index > #state.order then
+                return true
+            end
+            state.order[focused_index], state.order[target_index] = state.order[target_index], state.order[focused_index]
+            restack_windows()
+            return true
+        end
+
+        if message == "end" then
+            local focused_id = table.remove(state.order, focused_index)
+            table.insert(state.order, focused_id)
+            restack_windows()
+            return true
+        end
+
         local offset = message == "next" and 1 or -1
         local target_index = (focused_index - 1 + offset) % #state.order + 1
         local target = targets[state.order[target_index]]
@@ -146,22 +197,14 @@ hl.on("window.active", function()
     end
 
     hl.dispatch(hl.dsp.layout("refresh"))
-
-    for i = #state.order, 1, -1 do
-        local window = state.windows[state.order[i]]
-        if window then
-            hl.dispatch(hl.dsp.window.alter_zorder({
-                mode = "top",
-                window = window,
-            }))
-        end
-    end
+    restack_windows()
 end)
 
 local function focus_card_or_direction(direction, message)
     return function()
         local active_window = hl.get_active_window()
-        if hl.get_config("general.layout") == "lua:stacked" and active_window and not active_window.floating then
+        local layout = hl.get_config("general.layout")
+        if layout == "lua:stacked" and active_window and not active_window.floating then
             hl.dispatch(hl.dsp.layout(message))
         else
             hl.dispatch(hl.dsp.focus({ direction = direction }))
@@ -169,5 +212,5 @@ local function focus_card_or_direction(direction, message)
     end
 end
 
-hl.bind(mainMod .. " + left", focus_card_or_direction("left", "prev"), { repeating = true })
-hl.bind(mainMod .. " + right", focus_card_or_direction("right", "next"), { repeating = true })
+hl.bind(mainMod .. " + left", focus_card_or_direction("left", "next"), { repeating = true })
+hl.bind(mainMod .. " + right", focus_card_or_direction("right", "prev"), { repeating = true })
