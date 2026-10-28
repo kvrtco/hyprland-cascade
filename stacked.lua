@@ -1,0 +1,173 @@
+local scale = 0.96
+local mainMod = "SUPER"
+local positions = {
+    { x = 0.04, y = 0.00 },
+    { x = 0.02, y = 0.02 },
+    { x = 0.00, y = 0.04 },
+}
+
+local state = {
+    order = {},
+    focused_id = nil,
+    windows = {},
+}
+
+local function target_id(target)
+    return target.window and tostring(target.window.stable_id) or tostring(target.index)
+end
+
+local function index_of(list, value)
+    for i, item in ipairs(list) do
+        if item == value then
+            return i
+        end
+    end
+end
+
+local function sync_order(ctx)
+    local present = {}
+    local targets = {}
+    local focused_id
+    local windows = {}
+
+    for _, target in ipairs(ctx.targets) do
+        local id = target_id(target)
+        present[id] = true
+        targets[id] = target
+
+        if target.window then
+            windows[id] = target.window
+        end
+
+        if target.window and target.window.active then
+            focused_id = id
+        end
+    end
+
+    local order = {}
+    local included = {}
+
+    for _, id in ipairs(state.order) do
+        if present[id] and not included[id] then
+            table.insert(order, id)
+            included[id] = true
+        end
+    end
+
+    for _, target in ipairs(ctx.targets) do
+        local id = target_id(target)
+        if not included[id] then
+            table.insert(order, id)
+            included[id] = true
+        end
+    end
+
+    state.order = order
+    state.windows = windows
+
+    if focused_id ~= state.focused_id then
+        local focused_index = index_of(state.order, focused_id)
+
+        if focused_index and focused_index > 1 then
+            local rotated = {}
+            for i = focused_index, #state.order do
+                table.insert(rotated, state.order[i])
+            end
+            for i = 1, focused_index - 1 do
+                table.insert(rotated, state.order[i])
+            end
+            state.order = rotated
+        end
+
+        state.focused_id = focused_id
+    end
+
+    return targets
+end
+
+hl.layout.register("stacked", {
+    recalculate = function(ctx)
+        local targets = sync_order(ctx)
+        local area = ctx.area
+
+        if #state.order == 1 then
+            targets[state.order[1]]:place(area)
+            return
+        end
+
+        for i, id in ipairs(state.order) do
+            local target = targets[id]
+            local position = positions[math.min(i, #positions)]
+
+            target:place({
+                x = area.x + area.w * position.x,
+                y = area.y + area.h * position.y,
+                w = area.w * scale,
+                h = area.h * scale,
+            })
+        end
+
+    end,
+
+    layout_msg = function(ctx, message)
+        if message == "refresh" then
+            return true
+        end
+
+        if message ~= "next" and message ~= "prev" then
+            return "stacked: expected next, prev, or refresh"
+        end
+
+        local targets = sync_order(ctx)
+        if #state.order < 2 then
+            return true
+        end
+
+        local focused_index = index_of(state.order, state.focused_id) or 1
+        local offset = message == "next" and 1 or -1
+        local target_index = (focused_index - 1 + offset) % #state.order + 1
+        local target = targets[state.order[target_index]]
+
+        if not target or not target.window then
+            return "stacked: target card has no window"
+        end
+
+        hl.dispatch(hl.dsp.focus({
+            window = "address:" .. target.window.address,
+        }))
+
+        return true
+    end,
+})
+
+hl.on("window.active", function()
+    if hl.get_config("general.layout") ~= "lua:stacked" then
+        return
+    end
+
+    hl.dispatch(hl.dsp.layout("refresh"))
+
+    for i = #state.order, 1, -1 do
+        local window = state.windows[state.order[i]]
+        if window then
+            hl.dispatch(hl.dsp.window.alter_zorder({
+                mode = "top",
+                window = window,
+            }))
+        end
+    end
+end)
+
+local function focus_card_or_direction(direction, message)
+    return function()
+        local active_window = hl.get_active_window()
+        if hl.get_config("general.layout") == "lua:stacked" and active_window and not active_window.floating then
+            hl.dispatch(hl.dsp.layout(message))
+        else
+            hl.dispatch(hl.dsp.focus({ direction = direction }))
+        end
+    end
+end
+
+hl.bind(mainMod .. " + left", focus_card_or_direction("left", "prev"), { repeating = true })
+hl.bind(mainMod .. " + right", focus_card_or_direction("right", "next"), { repeating = true })
