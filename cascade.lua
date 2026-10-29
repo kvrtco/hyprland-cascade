@@ -1,9 +1,17 @@
 local mainMod = "SUPER"
 
+-- Settings --
 local cascade = {
+    -- Direction of the cascade
     direction = "bottom-right",
+    -- How much of a window sticks out ( 0.02 is 2% )
+    -- After maxSpread is reached, carStep starts to decrease.
     cardStep = 0.02,
+    -- A cap on the size of windows ( 0.1 is 90% )
     maxSpread = 0.1,
+
+    -- So with 2% cardStep and 6 open windows,
+    -- your focused window is going to be at max size of 90% of the screen ( 5 cards stacked behind * 2% cardStep ).
 }
 local directions = {
     ["top-left"] = { horizontal = "left", vertical = "top" },
