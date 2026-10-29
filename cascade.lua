@@ -1,6 +1,30 @@
 local mainMod = "SUPER"
-local cardStep = 0.016
-local maxSpread = 0.08
+
+local cascade = {
+    direction = "bottom-right",
+    cardStep = 0.02,
+    maxSpread = 0.1,
+}
+local directions = {
+    ["top-left"] = { horizontal = "left", vertical = "top" },
+    ["top-right"] = { horizontal = "right", vertical = "top" },
+    ["bottom-left"] = { horizontal = "left", vertical = "bottom" },
+    ["bottom-right"] = { horizontal = "right", vertical = "bottom" },
+}
+local cascadeDirection = directions[cascade.direction]
+
+if not cascadeDirection then
+    error('cascade.direction must be "top-left", "top-right", "bottom-left", or "bottom-right"')
+end
+
+if type(cascade.cardStep) ~= "number" or cascade.cardStep ~= cascade.cardStep or cascade.cardStep < 0 or cascade.cardStep == math.huge then
+    error("cascade.cardStep must be a finite non-negative number")
+end
+
+if type(cascade.maxSpread) ~= "number" or cascade.maxSpread ~= cascade.maxSpread or cascade.maxSpread < 0 or cascade.maxSpread >= 1 or
+    cascade.maxSpread == math.huge then
+    error("cascade.maxSpread must be a finite number from 0 up to, but not including, 1")
+end
 
 local state = {
     order = {},
@@ -93,7 +117,7 @@ local function restack_windows()
     end
 end
 
-hl.layout.register("stacked", {
+hl.layout.register("cascade", {
     recalculate = function(ctx)
         local targets = sync_order(ctx)
         local area = ctx.area
@@ -108,14 +132,14 @@ hl.layout.register("stacked", {
             return
         end
 
-        local spread = math.min(maxSpread, cardStep * (count - 1))
+        local spread = math.min(cascade.maxSpread, cascade.cardStep * (count - 1))
         local step = spread / (count - 1)
         local scale = 1 - spread
 
         for i, id in ipairs(state.order) do
             local target = targets[id]
-            local xOffset = spread - step * (i - 1)
-            local yOffset = step * (i - 1)
+            local xOffset = cascadeDirection.horizontal == "right" and spread - step * (i - 1) or step * (i - 1)
+            local yOffset = cascadeDirection.vertical == "bottom" and spread - step * (i - 1) or step * (i - 1)
 
             target:place({
                 x = area.x + area.w * xOffset,
@@ -124,7 +148,6 @@ hl.layout.register("stacked", {
                 h = area.h * scale,
             })
         end
-
     end,
 
     layout_msg = function(ctx, message)
@@ -137,7 +160,7 @@ hl.layout.register("stacked", {
             forward = 1,
         }
         if message ~= "next" and message ~= "prev" and not reorder_actions[message] and message ~= "end" and message ~= "top" then
-            return "stacked: expected next, prev, backward, forward, end, top, or refresh"
+            return "cascade: expected next, prev, backward, forward, end, top, or refresh"
         end
 
         local targets = sync_order(ctx)
@@ -148,7 +171,7 @@ hl.layout.register("stacked", {
         if message == "top" then
             local target = targets[state.order[1]]
             if not target or not target.window then
-                return "stacked: top card has no window"
+                return "cascade: top card has no window"
             end
 
             hl.dispatch(hl.dsp.focus({
@@ -163,7 +186,8 @@ hl.layout.register("stacked", {
             if target_index < 1 or target_index > #state.order then
                 return true
             end
-            state.order[focused_index], state.order[target_index] = state.order[target_index], state.order[focused_index]
+            state.order[focused_index], state.order[target_index] = state.order[target_index], state.order
+                [focused_index]
             restack_windows()
             return true
         end
@@ -180,7 +204,7 @@ hl.layout.register("stacked", {
         local target = targets[state.order[target_index]]
 
         if not target or not target.window then
-            return "stacked: target card has no window"
+            return "cascade: target card has no window"
         end
 
         hl.dispatch(hl.dsp.focus({
@@ -192,7 +216,7 @@ hl.layout.register("stacked", {
 })
 
 hl.on("window.active", function()
-    if hl.get_config("general.layout") ~= "lua:stacked" then
+    if hl.get_config("general.layout") ~= "lua:cascade" then
         return
     end
 
@@ -205,7 +229,7 @@ local function focus_card_or_direction(direction, message)
     return function()
         local active_window = hl.get_active_window()
         local layout = hl.get_config("general.layout")
-        if layout == "lua:stacked" and active_window and not active_window.floating then
+        if layout == "lua:cascade" and active_window and not active_window.floating then
             hl.dispatch(hl.dsp.layout(message))
         else
             hl.dispatch(hl.dsp.focus({ direction = direction }))
@@ -217,15 +241,15 @@ hl.bind(mainMod .. " + left", focus_card_or_direction("left", "next"), { repeati
 hl.bind(mainMod .. " + right", focus_card_or_direction("right", "prev"), { repeating = true })
 
 -- For moving windows around the stack (for Numpad)
-local function stacked_or_layout_action(stacked_message, layout_message)
+local function cascade_or_layout_action(cascade_message, layout_message)
     return function()
-        local message = hl.get_config("general.layout") == "lua:stacked" and stacked_message or layout_message
+        local message = hl.get_config("general.layout") == "lua:cascade" and cascade_message or layout_message
         hl.dispatch(hl.dsp.layout(message))
     end
 end
 
-hl.bind(mainMod .. " + KP_Left", stacked_or_layout_action("forward", "swapcol l"), { repeating = true })
-hl.bind(mainMod .. " + KP_Right", stacked_or_layout_action("backward", "swapcol r"), { repeating = true })
-hl.bind(mainMod .. " + KP_Begin", stacked_or_layout_action("top", "fit toend"), { repeating = true })
-hl.bind(mainMod .. " + KP_End", stacked_or_layout_action("end", "consume_or_expel prev"), { repeating = true })
-hl.bind(mainMod .. " + KP_Next", stacked_or_layout_action("front", "consume_or_expel next"), { repeating = true })
+hl.bind(mainMod .. " + KP_Left", cascade_or_layout_action("forward", "swapcol l"), { repeating = true })
+hl.bind(mainMod .. " + KP_Right", cascade_or_layout_action("backward", "swapcol r"), { repeating = true })
+hl.bind(mainMod .. " + KP_Begin", cascade_or_layout_action("top", "fit toend"), { repeating = true })
+hl.bind(mainMod .. " + KP_End", cascade_or_layout_action("end", "consume_or_expel prev"), { repeating = true })
+hl.bind(mainMod .. " + KP_Next", cascade_or_layout_action("front", "consume_or_expel next"), { repeating = true })
