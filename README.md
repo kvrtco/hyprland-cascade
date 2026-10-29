@@ -1,6 +1,7 @@
 # Hyprland Cascade Layout
 
-<img width="720" height="405" alt="stacked" src="https://github.com/user-attachments/assets/bdcb520f-d8a9-41e6-95d7-fb927e004a55" />
+https://github.com/user-attachments/assets/5fab7370-9322-4f43-9ab6-35dd7e4aca3a
+
 <br><br/>
   
 ### A cascade style layout for Hyprland.  
