@@ -1,8 +1,6 @@
 # Hyprland Cascade Layout
 
 https://github.com/user-attachments/assets/5fab7370-9322-4f43-9ab6-35dd7e4aca3a
-
-<br><br/>
   
 ### A cascade style layout for Hyprland.  
 Requires [my patched Hyprland fork](https://github.com/kvrtco/Hyprland-overlap-hit-patch) to work properly. **Loads on vanilla Hyprland, just isn't usable** (Clicking on a focused window shifts focus to the window underneath it, making normal use impractical).
