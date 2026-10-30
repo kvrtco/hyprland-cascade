@@ -64,7 +64,7 @@ local function sync_order(ctx)
         targets[id] = target
 
         if target.window then
-            windows[id] = target.window
+            windows[id] = target.window.address
         end
 
         if target.window and target.window.active then
@@ -115,11 +115,11 @@ end
 
 local function restack_windows()
     for i = #state.order, 1, -1 do
-        local window = state.windows[state.order[i]]
-        if window then
+        local address = state.windows[state.order[i]]
+        if address then
             hl.dispatch(hl.dsp.window.alter_zorder({
                 mode = "top",
-                window = window,
+                window = "address:" .. address,
             }))
         end
     end
